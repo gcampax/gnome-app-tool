@@ -46,15 +46,25 @@ const ApplicationModel = new Lang.Class({
 	this._desktop = new GLib.KeyFile();
 
 	let desktopFN = GLib.build_filenamev([this._basedir, 'data',
-					      id + '.desktop.in']);
-	this._desktop.load_from_file(desktopFN, GLib.KeyFileFlags.NONE);
+					      id + '.desktop.in.in']);
+	this._file = Gio.File.new_for_path(desktopFN);
+	if (!this._file.query_exists(null)) {
+	    let desktopFN = GLib.build_filenamev([this._basedir, 'data',
+						  id + '.desktop.in']);
+	    this._file = Gio.File.new_for_path(desktopFN);
+	}
+
+	this._desktop.load_from_file(this._file.get_path(), GLib.KeyFileFlags.NONE);
 
 	this._saveTimeoutId = 0;
-	getApp().connect('shutdown', Lang.bind(this, this.saveNow));
     },
 
     get app_name() {
-	return this._desktop.get_string('Desktop Entry', '_Name');
+	try {
+	    return this._desktop.get_string('Desktop Entry', '_Name');
+	} catch(e) {
+	    return '';
+	}
     },
 
     set app_name(v) {
@@ -67,7 +77,11 @@ const ApplicationModel = new Lang.Class({
     },
 
     get comment() {
-	return this._desktop.get_string('Desktop Entry', '_Comment');
+	try {
+	    return this._desktop.get_string('Desktop Entry', '_Comment');
+	} catch(e) {
+	    return '';
+	}
     },
 
     set comment(v) {
@@ -79,11 +93,31 @@ const ApplicationModel = new Lang.Class({
 	this.notify('comment');
     },
 
+    get keywords() {
+	try {
+	    return this._desktop.get_string_list('Desktop Entry', '_Keywords');
+	} catch(e) {
+	    return [];
+	}
+    },
+
+    set keywords(v) {
+	if (Util.arrayEqual(v, this.keywords))
+	    return;
+
+	if (v.length > 0)
+	    this._desktop.set_string_list('Desktop Entry', '_Keywords', v);
+	else
+	    this._desktop.remove_key('Desktop Entry', '_Keywords');
+	this.save();
+	this.notify('keywords');
+    },
+
     save: function() {
 	if (this._saveTimeoutId != 0)
 	    return;
 
-	this._saveTimeoutId = Mainloop.timeout_add_seconds(60, Lang.bind(this, this._saveTimeout));
+	this._saveTimeoutId = Mainloop.timeout_add_seconds(20, Lang.bind(this, this._saveTimeout));
     },
 
     saveNow: function() {
@@ -93,9 +127,9 @@ const ApplicationModel = new Lang.Class({
 	Mainloop.source_remove(this._saveTimeoutId);
 	this._saveTimeoutId = 0;
 
-	let [file, data] = this._presave();
+	let [data, len] = this._desktop.to_data();
 	try {
-	    file.replace_contents(data, null, true, Gio.FileCreateFlags.NONE, null);
+	    this._file.replace_contents(data, null, true, Gio.FileCreateFlags.NONE, null);
 	    return true;
 	} catch(e) {
 	    getCurrentWindow().notifyError(_("Failed to save: %s").format(e.message));
@@ -103,20 +137,10 @@ const ApplicationModel = new Lang.Class({
 	}
     },
 
-    _presave: function() {
+    _saveTimeout: function(sync) {
 	let [data, len] = this._desktop.to_data();
 
-	let desktopFN = GLib.build_filenamev([this._basedir, 'data',
-					      this._pkgId + '.desktop.in']);
-	let desktopFile = Gio.File.new_for_path(desktopFN);
-
-	return [desktopFile, data];
-    },
-
-    _saveTimeout: function(sync) {
-	let [file, data] = this._presave();
-
-	file.replace_contents_async(data, null, true, Gio.FileCreateFlags.NONE,
+	this._file.replace_contents_async(data, null, true, Gio.FileCreateFlags.NONE,
 				    null, Lang.bind(this, this._onSaved));
 	this._saveTimeoutId = 0;
 	return false;
@@ -167,6 +191,14 @@ const ProjectView = new Lang.Class({
 			  { name: 'keyword-remove',
 			    activate: this._keywordRemove }]);
 	this.widget.insert_action_group('page', this);
+
+	let keywordList = ui.get_object('keyword-store');
+	keywordList.connect('row-inserted', Lang.bind(this, this._queueSaveKeywords));
+	keywordList.connect('row-deleted', Lang.bind(this, this._queueSaveKeywords));
+	keywordList.connect('row-changed', Lang.bind(this, this._queueSaveKeywords));
+
+	let renderer = ui.get_object('keyword-cell');
+        renderer.connect('edited', Lang.bind(this, this._keywordEdit));
     },
 
     _bindModel: function(model, property, widget) {
@@ -180,12 +212,20 @@ const ProjectView = new Lang.Class({
 	for (let b in this._bindings)
 	    this._bindings[b].unbind();
 
-	if (model) {
-	    this._bindModel(model, 'app-name', 'entry-name');
-	    this._bindModel(model, 'comment', 'entry-comment');
-	} else {
+	if (model == null) {
 	    this._bindings = {};
+	    return;
 	}
+
+	this._bindModel(model, 'app-name', 'entry-name');
+	this._bindModel(model, 'comment', 'entry-comment');
+
+	let keywordList = this._ui.get_object('keyword-store');
+	keywordList.clear();
+
+	let keywords = model.keywords;
+	for (let i = 0; i < keywords.length; i++)
+	    keywordList.insert_with_valuesv(-1, [0], [keywords[i]]);
     },
 
     updateHeader: function(header, ui) {
@@ -212,11 +252,55 @@ const ProjectView = new Lang.Class({
 	return true;
     },
 
+    _saveKeywords: function() {
+	let gtkModel = this._ui.get_object('keyword-store');
+
+	let keywords = [];
+	let [ok, iter] = gtkModel.get_iter_first();
+	while (ok) {
+	    let v = gtkModel.get_value(iter, 0);
+	    keywords.push(v);
+
+	    ok = gtkModel.iter_next(iter);
+	}
+
+	if (this._model)
+	    this._model.keywords = keywords;
+
+	this._saveKeywordsId = 0;
+	return false;
+    },
+
+    _queueSaveKeywords: function() {
+	if (this._saveKeywordsId)
+	    return;
+
+	this._saveKeywordsId = Mainloop.idle_add(Lang.bind(this, this._saveKeywords));
+    },
+
+    _keywordEdit: function(renderer, path, new_text) {
+	let gtkModel = this._ui.get_object('keyword-store');
+
+        let [ok, iter] = gtkModel.get_iter_from_string(path);
+
+        if (ok)
+            gtkModel.set(iter, [0], [new_text]);
+    },
+
     _keywordAdd: function() {
-	// FIXME
+	let gtkModel = this._ui.get_object('keyword-store');
+
+	gtkModel.insert_with_valuesv(-1, [0], [_("Type here the new keyword").italics()]);
     },
 
     _keywordRemove: function() {
-	// FIXME
+	let selection = this._ui.get_object('keyword-treeview-selection');
+
+	let [any, gtkModel, selected] = selection.get_selected();
+	if (any) {
+	    gtkModel.remove(selected);
+
+	    this._queueSaveKeywords();
+	}
     },
 });

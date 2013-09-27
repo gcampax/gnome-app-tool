@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.15.4 on Fri Sep 27 11:45:58 2013 -->
+<!-- Generated with glade 3.15.4 on Fri Sep 27 15:47:53 2013 -->
 <interface>
-  <!-- interface-requires gtk+ 3.6 -->
-  <object class="GtkListStore" id="keyword-store"/>
+  <!-- interface-requires gtk+ 3.10 -->
+  <object class="GtkListStore" id="keyword-store">
+    <columns>
+      <!-- column-name keyword -->
+      <column type="gchararray"/>
+    </columns>
+  </object>
   <object class="GtkHeaderBar" id="main-header">
     <property name="can_focus">False</property>
     <property name="visible">True</property>
@@ -180,6 +185,26 @@
                 <property name="hexpand">True</property>
                 <property name="vexpand">True</property>
                 <property name="model">keyword-store</property>
+                <property name="headers_visible">False</property>
+                <child internal-child="selection">
+                  <object class="GtkTreeSelection" id="keyword-treeview-selection">
+                    <property name="mode">browse</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkTreeViewColumn" id="keyword-column">
+                    <property name="title" translatable="yes">Keyword</property>
+                    <property name="sort_column_id">0</property>
+                    <child>
+                      <object class="GtkCellRendererText" id="keyword-cell">
+                        <property name="editable">True</property>
+                      </object>
+                      <attributes>
+                        <attribute name="markup">0</attribute>
+                      </attributes>
+                    </child>
+                  </object>
+                </child>
               </object>
             </child>
           </object>
