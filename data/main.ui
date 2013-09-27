@@ -12,12 +12,12 @@
       <object class="GtkButton" id="btn-goto-project-selection">
 	<property name="can_focus">True</property>
 	<property name="visible">True</property>
-	<property name="action-name">goto-project-selection</property>
+	<property name="action-name">win.goto-project-selection</property>
 	<child>
 	  <object class="GtkImage" id="img-goto-project-selection">
 	    <property name="can_focus">False</property>
 	    <property name="visible">True</property>
-	    <property name="icon-name">go-back-symbolic</property>
+	    <property name="icon-name">go-previous-symbolic</property>
 	  </object>
 	</child>
       </object>
@@ -202,7 +202,7 @@
               <object class="GtkToolButton" id="keyword-add">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="action_name">keyword-add</property>
+                <property name="action_name">page.keyword-add</property>
                 <property name="label" translatable="yes">Add</property>
                 <property name="use_underline">True</property>
                 <property name="icon_name">list-add-symbolic</property>
@@ -216,7 +216,7 @@
               <object class="GtkToolButton" id="keyword-remove">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="action_name">keyword-remove</property>
+                <property name="action_name">page.keyword-remove</property>
                 <property name="label" translatable="yes">Remove</property>
                 <property name="use_underline">True</property>
                 <property name="icon_name">list-remove-symbolic</property>

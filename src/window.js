@@ -70,9 +70,9 @@ const MainWindow = new Lang.Class({
 
     vfunc_delete_event: function(event) {
         if (this._stack.visible_child_name == 'project')
-            this.currentView.save();
-
-        return false;
+            return !this.currentView.save();
+        else
+            return false;
     },
 
     get currentView() {

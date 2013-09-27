@@ -49,6 +49,7 @@ const ApplicationModel = new Lang.Class({
 					      id + '.desktop.in']);
 	this._desktop.load_from_file(desktopFN, GLib.KeyFileFlags.NONE);
 
+	this._saveTimeoutId = 0;
 	getApp().connect('shutdown', Lang.bind(this, this.saveNow));
     },
 
@@ -79,37 +80,44 @@ const ApplicationModel = new Lang.Class({
     },
 
     save: function() {
-	if (this._saveTimeoutId)
+	if (this._saveTimeoutId != 0)
 	    return;
 
 	this._saveTimeoutId = Mainloop.timeout_add_seconds(60, Lang.bind(this, this._saveTimeout));
-     },
+    },
 
-     saveNow: function() {
-	 if (this._saveTimeoutId)
-	     Mainloop.source_remove(this._saveTimeoutId);
+    saveNow: function() {
+	if (this._saveTimeoutId == 0)
+	    return true;
 
-	 this._saveTimeout(true);
-     },
+	Mainloop.source_remove(this._saveTimeoutId);
+	this._saveTimeoutId = 0;
 
-    _saveTimeout: function(sync) {
+	let [file, data] = this._presave();
+	try {
+	    file.replace_contents(data, null, true, Gio.FileCreateFlags.NONE, null);
+	    return true;
+	} catch(e) {
+	    getCurrentWindow().notifyError(_("Failed to save: %s").format(e.message));
+	    return false;
+	}
+    },
+
+    _presave: function() {
 	let [data, len] = this._desktop.to_data();
 
 	let desktopFN = GLib.build_filenamev([this._basedir, 'data',
 					      this._pkgId + '.desktop.in']);
 	let desktopFile = Gio.File.new_for_path(desktopFN);
 
-	if (sync) {
-	    try {
-		desktopFile.replace_contents(data, null, true, Gio.FileCreateFlags.NONE, null);
-	    } catch(e) {
-		getCurrentWindow().notifyError(_("Failed to save: %s").format(e.message));
-	    }
-	} else {
-	    desktopFile.replace_contents_async(data, null, true, Gio.FileCreateFlags.NONE,
-					       null, Lang.bind(this, this._onSaved));
-	}
+	return [desktopFile, data];
+    },
 
+    _saveTimeout: function(sync) {
+	let [file, data] = this._presave();
+
+	file.replace_contents_async(data, null, true, Gio.FileCreateFlags.NONE,
+				    null, Lang.bind(this, this._onSaved));
 	this._saveTimeoutId = 0;
 	return false;
     },
@@ -125,17 +133,25 @@ const ApplicationModel = new Lang.Class({
 
 const ProjectView = new Lang.Class({
     Name: 'ProjectView',
+    Extends: Gio.SimpleActionGroup,
 
     _init: function(ui) {
+	this.parent();
+
 	this._ui = ui;
+	this.widget = ui.get_object('project-grid');
 
 	this._info = ui.get_object('project-info');
 	this._infoRevealer = ui.get_object('project-info-revealer');
 	this._infoMessage = ui.get_object('project-info-message');
-	ui.get_object('project-info').connect('response', function(infobar, id) {
+	ui.get_object('project-info').connect('response', Lang.bind(this, function(infobar, id) {
 	    if (id == Gtk.ResponseType.CLOSE)
 		this._infoRevealer.reveal_child = false;
-	});
+
+	    if (this._quitOnInfoClose)
+		this.widget.get_toplevel().destroy();
+	}));
+	this._quitOnInfoClose = false;
 
 	let stack = ui.get_object('project-stack');
         stack.add_titled(ui.get_object('page-desktop'),
@@ -144,6 +160,13 @@ const ProjectView = new Lang.Class({
 	this.switcher = new Gtk.StackSwitcher({ stack: stack });
 
 	this._bindings = {};
+
+	Util.initActions(this,
+			 [{ name: 'keyword-add',
+			    activate: this._keywordAdd },
+			  { name: 'keyword-remove',
+			    activate: this._keywordRemove }]);
+	this.widget.insert_action_group('page', this);
     },
 
     _bindModel: function(model, property, widget) {
@@ -177,7 +200,23 @@ const ProjectView = new Lang.Class({
     },
 
     save: function() {
-	if (this._model)
-	    this._model.saveNow();
-    }
+	if (!this._model || this._quitOnInfoClose)
+	    return true;
+
+	if (!this._model.saveNow()) {
+	    this.setModel(null);
+	    this._quitOnInfoClose = true;
+	    return false;
+	}
+
+	return true;
+    },
+
+    _keywordAdd: function() {
+	// FIXME
+    },
+
+    _keywordRemove: function() {
+	// FIXME
+    },
 });
