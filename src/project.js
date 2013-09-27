@@ -34,7 +34,10 @@ const ApplicationModel = new Lang.Class({
     Properties: {
 	'app-name': GObject.ParamSpec.string('app-name', '','', GObject.ParamFlags.READWRITE, ''),
 	'comment': GObject.ParamSpec.string('comment', '','', GObject.ParamFlags.READWRITE, ''),
-	'keywords': GObject.ParamSpec.boxed('keywords', '', '', GObject.ParamFlags.READWRITE, GObject.type_from_name('GStrv'))
+	'keywords': GObject.ParamSpec.boxed('keywords', '', '', GObject.ParamFlags.READWRITE, GObject.type_from_name('GStrv')),
+	'appdata-name': GObject.ParamSpec.string('appdata-name', '','', GObject.ParamFlags.READWRITE, ''),
+	'appdata-summary': GObject.ParamSpec.string('appdata-summary', '','', GObject.ParamFlags.READWRITE, ''),
+	'appdata-url': GObject.ParamSpec.string('appdata-url', '','', GObject.ParamFlags.READWRITE, ''),
     },
 
     _init: function(basedir, id) {
@@ -47,14 +50,23 @@ const ApplicationModel = new Lang.Class({
 
 	let desktopFN = GLib.build_filenamev([this._basedir, 'data',
 					      id + '.desktop.in.in']);
-	this._file = Gio.File.new_for_path(desktopFN);
-	if (!this._file.query_exists(null)) {
-	    let desktopFN = GLib.build_filenamev([this._basedir, 'data',
+	this._desktopFile = Gio.File.new_for_path(desktopFN);
+	if (!this._desktopFile.query_exists(null)) {
+	    let desktopFN = GLib.build_desktopFilenamev([this._basedir, 'data',
 						  id + '.desktop.in']);
-	    this._file = Gio.File.new_for_path(desktopFN);
+	    this._desktopFile = Gio.File.new_for_path(desktopFN);
 	}
 
-	this._desktop.load_from_file(this._file.get_path(), GLib.KeyFileFlags.NONE);
+	this._desktop.load_from_file(this._desktopFile.get_path(), GLib.KeyFileFlags.NONE);
+
+	let appdataFN = GLib.build_filenamev([this._basedir, 'data',
+					      id + '.appdata.xml.in']);
+	this._appdataFile = Gio.File.new_for_path(appdataFN);
+	let [ok, data] = GLib.file_get_contents(appdataFN);
+	data = String(data);
+	if (data.startsWith('<?xml'))
+	    data = data.replace(/<\?xml[^\n]+/, '');
+	this._appdata = new XML(data);
 
 	this._saveTimeoutId = 0;
     },
@@ -113,6 +125,55 @@ const ApplicationModel = new Lang.Class({
 	this.notify('keywords');
     },
 
+    get appdata_name() {
+	if (this._appdata.application._name)
+	    return this._appdata.application._name.text();
+	else
+	    return '';
+    },
+
+    set appdata_name(v) {
+	if (v == this.appdata_name)
+	    return;
+
+	this._appdata.application._name = v;
+	this.save();
+	this.notify('appdata-name');
+    },
+
+    get appdata_summary() {
+	if (this._appdata.application._summary)
+	    return this._appdata.application._summary.text();
+	else
+	    return '';
+    },
+
+    set appdata_summary(v) {
+	if (v == this.appdata_summary)
+	    return;
+
+	this._appdata.application._summary = v;
+	this.save();
+	this.notify('appdata-summary');
+    },
+
+    get appdata_url() {
+	log('get url');
+	let v = this._appdata.application.url.*.text() || '';
+	log(v);
+	return v;
+    },
+
+    set appdata_url(v) {
+	if (v == this.appdata_url)
+	    return;
+
+	this._appdata.application.url = v;
+	this._appdata.application.url.@type = 'homepage';
+	this.save();
+	this.notify('appdata-url');
+    },    
+
     save: function() {
 	if (this._saveTimeoutId != 0)
 	    return;
@@ -127,9 +188,11 @@ const ApplicationModel = new Lang.Class({
 	Mainloop.source_remove(this._saveTimeoutId);
 	this._saveTimeoutId = 0;
 
-	let [data, len] = this._desktop.to_data();
+	let [desktopData, len] = this._desktop.to_data();
+	let appdataData = this._appdata.toString();
 	try {
-	    this._file.replace_contents(data, null, true, Gio.FileCreateFlags.NONE, null);
+	    this._desktopFile.replace_contents(desktopData, null, true, Gio.FileCreateFlags.NONE, null);
+	    this._appdataFile.replace_contents(appdataData, null, true, Gio.FileCreateFlags.NONE, null);
 	    return true;
 	} catch(e) {
 	    getCurrentWindow().notifyError(_("Failed to save: %s").format(e.message));
@@ -140,19 +203,31 @@ const ApplicationModel = new Lang.Class({
     _saveTimeout: function(sync) {
 	let [data, len] = this._desktop.to_data();
 
-	this._file.replace_contents_async(data, null, true, Gio.FileCreateFlags.NONE,
-				    null, Lang.bind(this, this._onSaved));
+	this._desktopFile.replace_contents_async(data, null, true, Gio.FileCreateFlags.NONE,
+				    null, Lang.bind(this, this._onDesktopSaved));
 	this._saveTimeoutId = 0;
 	return false;
     },
 
-    _onSaved: function(source, result) {
+    _onDesktopSaved: function(source, result) {
+	try {
+	    source.replace_contents_finish(result);
+
+	    appdataData = this._appdata.toString();
+	    this._appdataFile.replace_contents_async(appdataData, null, true, Gio.FileCreateFlags.NONE,
+						     null, Lang.bind(this, this._onAppdataSaved));
+	} catch(e) {
+	    getCurrentWindow().notifyError(_("Failed to save: %s").format(e.message));
+	}
+    },
+
+    _onAppdataSaved: function(source, result) {
 	try {
 	    source.replace_contents_finish(result);
 	} catch(e) {
 	    getCurrentWindow().notifyError(_("Failed to save: %s").format(e.message));
 	}
-    },
+    }
 });
 
 const ProjectView = new Lang.Class({
@@ -180,6 +255,8 @@ const ProjectView = new Lang.Class({
 	let stack = ui.get_object('project-stack');
         stack.add_titled(ui.get_object('page-desktop'),
                          'desktop', _("Desktop file"));
+	stack.add_titled(ui.get_object('page-appdata'),
+			 'appdata', _("Appdata file"));
 
 	this.switcher = new Gtk.StackSwitcher({ stack: stack });
 
@@ -199,11 +276,44 @@ const ProjectView = new Lang.Class({
 
 	let renderer = ui.get_object('keyword-cell');
         renderer.connect('edited', Lang.bind(this, this._keywordEdit));
+
+	ui.get_object('chk-appdata-name').connect('notify::active', Lang.bind(this, this._syncAppdataBindings));
+	ui.get_object('chk-appdata-summary').connect('notify::active', Lang.bind(this, this._syncAppdataBindings));
+
+	ui.get_object('chk-appdata-name').bind_property('active', ui.get_object('entry-appdata-name'), 'sensitive',
+							GObject.BindingFlags.SYNC_CREATE);
+	ui.get_object('chk-appdata-summary').bind_property('active', ui.get_object('entry-appdata-summary'), 'sensitive',
+							GObject.BindingFlags.SYNC_CREATE);
     },
 
-    _bindModel: function(model, property, widget) {
-	this._bindings[property] = model.bind_property(property, this._ui.get_object(widget), 'text',
-						       GObject.BindingFlags.SYNC_CREATE | GObject.BindingFlags.BIDIRECTIONAL);
+    _bindModel: function(model, property, widgetName) {
+	let widget = this._ui.get_object(widgetName);
+	let flags = GObject.BindingFlags.SYNC_CREATE | GObject.BindingFlags.BIDIRECTIONAL;
+	this._bindings[property] = model.bind_property(property, widget, 'text', flags);
+    },
+
+    _bindRecursive: function(model, property, otherProperty) {
+	let flags = GObject.BindingFlags.SYNC_CREATE;
+	this._bindings[property] = model.bind_property(otherProperty, model, property, flags);
+    },
+
+    _syncAppdataBindings: function() {
+	if (!this._model)
+	    return;
+
+	if (this._bindings['appdata-name'])
+	    this._bindings['appdata-name'].unbind();
+	if (this._ui.get_object('chk-appdata-name').active)
+	    this._bindModel(this._model, 'appdata-name', 'entry-appdata-name');
+	else
+	    this._bindRecursive(this._model, 'appdata-name', 'app-name');
+
+	if (this._bindings['appdata-summary'])
+	    this._bindings['appdata-summary'].unbind();
+	if (this._ui.get_object('chk-appdata-summary').active)
+	    this._bindModel(this._model, 'appdata-summary', 'entry-appdata-summary');
+	else
+	    this._bindRecursive(this._model, 'appdata-summary', 'comment');
     },
 
     setModel: function(model) {
@@ -211,14 +321,15 @@ const ProjectView = new Lang.Class({
 
 	for (let b in this._bindings)
 	    this._bindings[b].unbind();
+	this._bindings = {};
 
-	if (model == null) {
-	    this._bindings = {};
+	if (model == null)
 	    return;
-	}
 
 	this._bindModel(model, 'app-name', 'entry-name');
 	this._bindModel(model, 'comment', 'entry-comment');
+	this._syncAppdataBindings();
+	this._bindModel(model, 'appdata-url', 'entry-appdata-url');
 
 	let keywordList = this._ui.get_object('keyword-store');
 	keywordList.clear();
