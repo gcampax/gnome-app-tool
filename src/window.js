@@ -25,6 +25,7 @@ const Lang = imports.lang;
 const Params = imports.params;
 
 const Util = imports.util;
+const Project = imports.project;
 
 const MainWindow = new Lang.Class({
     Name: 'MainWindow',
@@ -40,22 +41,59 @@ const MainWindow = new Lang.Class({
 
         Util.initActions(this,
                          [{ name: 'about',
-                            activate: this._about }]);
+                            activate: this._about },
+                          { name: 'goto-project-selection',
+                            activate: this._gotoProjectSelection }]);
 
         let builder = new Gtk.Builder();
         builder.add_from_resource('/org/gnome/AppTool/main.ui');
 
-        let stack = builder.get_object('main-stack');
-        this.add(stack);
+        this._stack = builder.get_object('main-stack');
+        this.add(this._stack);
 
-        let switcher = new Gtk.StackSwitcher({ stack: stack });
-        let header = builder.get_object('main-header');
-        header.custom_title = switcher;
-        this.set_titlebar(header);
+        this._view = {};
+        this._view['project-selection'] = undefined; // FIXME
+        this._view['project'] = new Project.ProjectView(builder);
+
+        this.header = builder.get_object('main-header');
+        this.set_titlebar(this.header);
+
+        this._stack.visible_child_name = 'project';
+        this._stack.connect('notify::visible-child', Lang.bind(this, this._updateView));
+        this._updateView();
+
+        // FIXME:
+        let model = new Project.ApplicationModel(GLib.get_home_dir() + '/gnome/gtk-js-app',
+                                                 'com.example.Gtk.JSApplication');
+        this._view['project'].setModel(model);
+    },
+
+    vfunc_delete_event: function(event) {
+        if (this._stack.visible_child_name == 'project')
+            this.currentView.save();
+
+        return false;
+    },
+
+    get currentView() {
+        return this._view[this._stack.visible_child_name];
+    },
+
+    notifyError: function(msg) {
+        this.currentView.notifyError(msg);
+    },
+
+    _updateView: function() {
+        if (this.currentView)
+            this.currentView.updateHeader(this.header);
+    },
+
+    _gotoProjectSelection: function() {
+        this._stack.visible_child_name = 'project-selection';
     },
 
     _about: function() {
-        let aboutDialog = new Gtk.AboutDialog(
+        let about = new Gtk.AboutDialog(
             { authors: [ 'Giovanni Campagna <scampa.giovanni@gmail.com>' ],
               translator_credits: _("translator-credits"),
               program_name: _("Gnome Application Tool"),
@@ -70,9 +108,9 @@ const MainWindow = new Lang.Class({
               transient_for: this
             });
 
-        aboutDialog.show();
-        aboutDialog.connect('response', function() {
-            aboutDialog.destroy();
+        about.show();
+        about.connect('response', function() {
+            about.destroy();
         });
     },
 });

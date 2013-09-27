@@ -29,15 +29,33 @@ pkg.require({ 'Gdk': '3.0',
 
 const Gio = imports.gi.Gio;
 const GLib = imports.gi.GLib;
+const GObject = imports.gi.GObject;
 const Gtk = imports.gi.Gtk;
 const Lang = imports.lang;
+
+// Preinit some gjs stuff, before we import the module and start building classes
+preinitEnvironment();
 
 const Util = imports.util;
 const Window = imports.window;
 
+function preinitEnvironment() {
+    GObject.ParamFlags.READWRITE = GObject.ParamFlags.READABLE | GObject.ParamFlags.WRITABLE;
+
+    if (!GObject.ParamSpec.boxed) {
+        GObject.ParamSpec.boxed = function(name, nick, blurb, flags, type) {
+            GObject.ParamSpec._new_internal(name, type, nick, blurb, flags);
+        }
+    }
+}
+
 function initEnvironment() {
     window.getApp = function() {
         return Gio.Application.get_default();
+    };
+
+    window.getCurrentWindow = function() {
+        return getApp().get_windows()[0];
     };
 }
 
@@ -55,7 +73,7 @@ const Application = new Lang.Class({
     },
 
     _onQuit: function() {
-        this.quit();
+        this.get_windows().forEach(function(w) { w.close(); });
     },
 
     _initAppMenu: function() {

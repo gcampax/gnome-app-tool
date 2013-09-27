@@ -10,6 +10,7 @@ dist_js_DATA = \
 	main.js		\
 	package.js	\
 	params.js	\
+	project.js	\
 	util.js		\
 	window.js	\
 	$(NULL)
