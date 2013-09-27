@@ -1,0 +1,6 @@
+#!@GJS@
+imports.searchPath.push("@pkgdatadir@");
+imports.package.start({ name: "org.gnome.AppTool",
+                        version: "@PACKAGE_VERSION@",
+                        prefix: "@prefix@",
+                        libdir: "@libdir@" });

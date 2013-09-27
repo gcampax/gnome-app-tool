@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+_Name=Gnome Application Tool
+_Comment=A tool for editing Gtk+ application metadata
+Icon=org.gnome.AppTool
+Exec=gnome-app-tool
+DBusActivatable=true
+StartupNotify=true

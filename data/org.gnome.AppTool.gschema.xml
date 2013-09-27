@@ -1,0 +1,11 @@
+<schemalist gettext-domain="org.gnome.AppTool">
+  <schema id="org.gnome.AppTool" path="/org/gnome/AppTool/">
+    <key name="dummy" type="b">
+      <default>true</default>
+      <summary>Dummy key</summary>
+      <description>
+	Dummy description
+      </description>
+    </key>
+  </schema>
+</schemalist>

@@ -1,0 +1,8 @@
+[type: gettext/glade]data/app-menu.ui
+[type: gettext/glade]data/main.ui
+data/org.gnome.AppTool.desktop.in
+data/org.gnome.AppTool.appdata.xml.in
+data/org.gnome.AppTool.gschema.xml
+src/main.js
+
+
