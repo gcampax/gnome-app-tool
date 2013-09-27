@@ -1,6 +1,6 @@
 AC_PREREQ(2.63)
 AC_INIT([org.gnome.AppTool], [0.1],
-        [gcampagn@redhat.com],
+        [scampa.giovanni@gmail.com],
         [gnome-app-tool],
         [http://live.gnome.org/GiovanniCampagna/Experiments/ApplicationTools])
 

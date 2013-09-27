@@ -11,5 +11,5 @@
     <screenshot type="default" width="1024" height="768">http://live.gnome.org/GiovanniCampagna/Experiments/ApplicationTools/screenshots/large.png</screenshot>
   </screenshots>
   <url type="homepage">http://live.gnome.org/GiovanniCampagna/Experiments/ApplicationTools</url>
-  <updatecontact>gcampagn@redhat.com</updatecontact>
+  <updatecontact>scampa.giovanni_at_gmail.com</updatecontact>
 </application>
